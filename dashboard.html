@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Honda EQM · Live Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07090f;--s1:#0c0f1a;--s2:#111624;--border:rgba(255,255,255,0.06);--text:#e8ecf4;--muted:#4a5568;--dim:#2a3245;--green:#00e5a0;--amber:#ffb300;--crit:#ff1744;--blue:#4fc3f7;--purple:#b388ff;--display:'Bebas Neue',sans-serif;--mono:'JetBrains Mono',monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,160,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,0.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+.loading-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .6s;}
+.loading-overlay.done{opacity:0;pointer-events:none;}
+.loading-title{font-family:var(--display);font-size:36px;letter-spacing:.1em;color:var(--green);}
+.loading-sub{font-size:8px;letter-spacing:.25em;color:var(--muted);}
+.loading-bar-wrap{width:200px;height:2px;background:var(--dim);border-radius:1px;overflow:hidden;}
+.loading-bar{height:100%;background:var(--green);animation:loadBar 1.5s ease forwards;}
+@keyframes loadBar{0%{width:0}100%{width:100%}}
+.fs-alert{position:fixed;inset:0;z-index:150;display:none;align-items:center;justify-content:center;background:rgba(7,9,15,0.93);backdrop-filter:blur(8px);}
+.fs-alert.show{display:flex;}
+.fs-alert-box{border:1px solid rgba(255,23,68,.4);background:var(--s1);border-radius:16px;padding:40px 48px;max-width:520px;width:90%;text-align:center;animation:alertPulse 2s ease infinite;}
+@keyframes alertPulse{0%,100%{border-color:rgba(255,23,68,.4)}50%{border-color:rgba(255,23,68,.9);box-shadow:0 0 40px rgba(255,23,68,.12)}}
+.fs-alert-icon{font-size:48px;margin-bottom:12px;}
+.fs-alert-title{font-family:var(--display);font-size:48px;letter-spacing:.05em;color:var(--crit);margin-bottom:6px;}
+.fs-alert-sub{font-size:9px;letter-spacing:.2em;color:var(--muted);margin-bottom:20px;}
+.fs-alert-msg{font-size:10px;color:var(--text);line-height:1.8;margin-bottom:24px;padding:14px 18px;background:rgba(255,23,68,.05);border-radius:8px;border:1px solid rgba(255,23,68,.1);text-align:left;white-space:pre-line;}
+.fs-alert-btn{font-family:var(--mono);font-size:8px;letter-spacing:.2em;padding:10px 28px;border-radius:6px;border:1px solid rgba(255,23,68,.4);background:rgba(255,23,68,.1);color:var(--crit);cursor:pointer;transition:all .2s;}
+.fs-alert-btn:hover{background:rgba(255,23,68,.25);}
+header{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:14px 32px;border-bottom:1px solid var(--border);background:rgba(7,9,15,0.92);backdrop-filter:blur(12px);}
+.logo{display:flex;align-items:center;gap:14px;}
+.logo-mark{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;}
+.logo-title{font-family:var(--display);font-size:20px;letter-spacing:.08em;line-height:1;}
+.logo-sub{font-size:7px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase;margin-top:2px;}
+.header-right{display:flex;align-items:center;gap:18px;}
+.conn-pill{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;border:1px solid rgba(0,229,160,.3);background:rgba(0,229,160,.07);font-size:8px;letter-spacing:.18em;color:var(--green);}
+.conn-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s ease infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.conn-pill.offline{border-color:rgba(255,179,0,.3);background:rgba(255,179,0,.07);color:var(--amber);}
+.conn-pill.offline .conn-dot{background:var(--amber);}
+.clock{font-size:11px;color:var(--muted);letter-spacing:.1em;}
+.tab-bar{position:relative;z-index:5;display:flex;border-bottom:1px solid var(--border);background:rgba(7,9,15,.7);padding:0 32px;overflow-x:auto;}
+.tab-bar::-webkit-scrollbar{height:2px;}
+.tab-bar::-webkit-scrollbar-thumb{background:var(--dim);}
+.tab-btn{font-family:var(--mono);font-size:8px;letter-spacing:.18em;text-transform:uppercase;padding:12px 18px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
+.tab-btn:hover{color:var(--text);}
+.tab-btn.active{color:var(--green);border-bottom-color:var(--green);}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+main{position:relative;z-index:1;padding:24px 32px;max-width:1440px;margin:0 auto;}
+.section-label{font-size:7px;letter-spacing:.3em;color:var(--muted);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:10px;}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border);}
+.stat-chips{display:flex;gap:8px;margin-bottom:22px;flex-wrap:wrap;}
+.stat-chip{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;font-size:8px;letter-spacing:.1em;}
+.stat-chip-label{color:var(--muted);}
+.metrics-row{display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:12px;margin-bottom:22px;}
+.metric-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden;}
+.metric-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent,var(--green));opacity:.6;border-radius:12px 12px 0 0;}
+.metric-glow{position:absolute;top:-20px;right:-20px;width:80px;height:80px;border-radius:50%;background:var(--accent,var(--green));opacity:.04;filter:blur(20px);pointer-events:none;}
+.metric-label{font-size:7px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+.metric-value{font-family:var(--display);font-size:44px;line-height:1;transition:color .4s;}
+.metric-unit{font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:3px;}
+.metric-sub{margin-top:8px;font-size:8px;color:var(--muted);letter-spacing:.08em;}
+.metric-bar-track{margin-top:10px;height:3px;background:var(--dim);border-radius:2px;overflow:hidden;}
+.metric-bar{height:100%;border-radius:2px;background:var(--accent,var(--green));transition:width .8s cubic-bezier(.4,0,.2,1);width:0%;}
+.risk-ring-wrap{display:flex;align-items:center;gap:14px;margin-top:4px;}
+.risk-ring-bg{fill:none;stroke:var(--dim);stroke-width:4;}
+.risk-ring-val{fill:none;stroke:var(--green);stroke-width:4;stroke-linecap:round;stroke-dasharray:157;stroke-dashoffset:157;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset 1s,stroke .4s;}
+.risk-ring-num{font-family:var(--display);font-size:18px;fill:var(--text);text-anchor:middle;dominant-baseline:middle;}
+.risk-level{font-size:9px;letter-spacing:.15em;color:var(--green);margin-bottom:4px;}
+.risk-desc{font-size:8px;color:var(--muted);line-height:1.6;}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px;}
+.chart-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
+.chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.chart-title{font-size:8px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;}
+.chart-live{font-size:7px;letter-spacing:.15em;color:var(--green);display:flex;align-items:center;gap:5px;}
+.chart-live-dot{width:5px;height:5px;border-radius:50%;background:var(--green);animation:blink 1.5s ease infinite;}
+canvas{width:100%!important;}
+.bottom-row{display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-bottom:22px;}
+.pred-panel{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.pred-top{height:2px;background:linear-gradient(90deg,var(--purple),var(--amber),var(--crit),transparent);}
+.pred-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 12px;border-bottom:1px solid var(--border);}
+.pred-title{font-family:var(--display);font-size:18px;letter-spacing:.05em;}
+.pred-badge{font-size:8px;letter-spacing:.18em;padding:4px 12px;border-radius:5px;border:1px solid rgba(0,229,160,.3);background:rgba(0,229,160,.08);color:var(--green);transition:all .3s;}
+.pred-badge.warn{border-color:rgba(255,179,0,.4);background:rgba(255,179,0,.1);color:var(--amber);}
+.pred-badge.crit{border-color:rgba(255,23,68,.4);background:rgba(255,23,68,.1);color:var(--crit);}
+.dtree-wrap{padding:14px 16px;}
+.dtree-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px;}
+.dtree-metric{background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;}
+.dtree-metric-label{font-size:6.5px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:3px;}
+.dtree-metric-val{font-family:var(--display);font-size:20px;line-height:1;}
+.dtree{display:flex;flex-direction:column;gap:0;}
+.dtree-row{display:flex;align-items:flex-start;gap:0;position:relative;}
+.dtree-connector{display:flex;flex-direction:column;align-items:center;width:18px;flex-shrink:0;margin-top:2px;}
+.dtree-line{width:1px;background:var(--border);flex:1;min-height:14px;}
+.dtree-dot{width:7px;height:7px;border-radius:50%;border:1px solid var(--muted);background:var(--bg);flex-shrink:0;}
+.dtree-dot.active{background:var(--green);border-color:var(--green);box-shadow:0 0 6px rgba(0,229,160,.4);}
+.dtree-dot.active.warn{background:var(--amber);border-color:var(--amber);box-shadow:0 0 6px rgba(255,179,0,.4);}
+.dtree-dot.active.crit{background:var(--crit);border-color:var(--crit);box-shadow:0 0 6px rgba(255,23,68,.4);}
+.dtree-node{flex:1;padding:7px 10px 7px 8px;border-radius:7px;border:1px solid var(--border);background:rgba(0,0,0,.15);margin-bottom:8px;transition:all .3s;}
+.dtree-node.active{border-color:rgba(0,229,160,.3);background:rgba(0,229,160,.04);}
+.dtree-node.active.warn{border-color:rgba(255,179,0,.35);background:rgba(255,179,0,.04);}
+.dtree-node.active.crit{border-color:rgba(255,23,68,.35);background:rgba(255,23,68,.04);}
+.dtree-cond{font-size:7.5px;color:var(--muted);letter-spacing:.05em;margin-bottom:2px;}
+.dtree-cond.active{color:var(--text);}
+.dtree-outcome{font-size:8px;color:var(--muted);}
+.dtree-outcome.active{color:var(--green);font-weight:500;}
+.dtree-outcome.active.warn{color:var(--amber);}
+.dtree-outcome.active.crit{color:var(--crit);}
+.action-card{margin:0 16px 14px;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,.2);overflow:hidden;}
+.action-card-top{height:2px;background:var(--green);transition:background .3s;}
+.action-card-top.warn{background:var(--amber);}
+.action-card-top.crit{background:var(--crit);}
+.action-inner{padding:10px 14px;}
+.action-cause-label{font-size:6.5px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+.action-cause-text{font-size:10px;color:var(--text);margin-bottom:10px;line-height:1.4;}
+.action-rec-label{font-size:6.5px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+.action-rec-text{font-size:10px;line-height:1.4;color:var(--green);transition:color .3s;}
+.action-rec-text.warn{color:var(--amber);}
+.action-rec-text.crit{color:var(--crit);}
+.pred-updated{font-size:7px;color:var(--dim);letter-spacing:.1em;padding:7px 16px;border-top:1px solid var(--border);}
+.history-panel{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.history-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);}
+.history-title{font-size:8px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;}
+.history-count{font-size:8px;color:var(--muted);}
+.history-table{width:100%;border-collapse:collapse;}
+.history-table th{font-size:6.5px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;padding:7px 12px;text-align:left;border-bottom:1px solid var(--border);background:var(--s2);}
+.history-table td{font-size:8px;padding:6px 12px;border-bottom:1px solid rgba(255,255,255,.02);}
+.history-table tr:hover td{background:var(--s2);}
+.tbl-time{color:var(--muted);}
+.tbl-temp{color:var(--amber);}
+.tbl-vib{color:var(--blue);}
+.tbl-status{display:inline-flex;align-items:center;font-size:7px;padding:2px 7px;border-radius:4px;letter-spacing:.1em;}
+.tbl-status.ok{color:var(--green);background:rgba(0,229,160,.08);}
+.tbl-status.warning{color:var(--amber);background:rgba(255,179,0,.08);}
+.tbl-status.critical{color:var(--crit);background:rgba(255,23,68,.08);}
+.history-scroll{max-height:280px;overflow-y:auto;}
+.history-scroll::-webkit-scrollbar{width:3px;}
+.history-scroll::-webkit-scrollbar-thumb{background:var(--dim);border-radius:2px;}
+.alert-banner{margin-bottom:16px;padding:10px 16px;border-radius:8px;border:1px solid rgba(255,23,68,.3);background:rgba(255,23,68,.07);color:var(--crit);font-size:9px;letter-spacing:.1em;display:flex;align-items:center;gap:10px;}
+.alert-banner.hidden{display:none;}
+.heatmap-wrap{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:22px;overflow-x:auto;}
+.heatmap-grid{display:grid;grid-template-columns:60px repeat(24,1fr);gap:2px;margin-top:12px;min-width:600px;}
+.heatmap-row-label{font-size:6.5px;color:var(--muted);display:flex;align-items:center;justify-content:flex-end;padding-right:8px;}
+.heatmap-hour-label{font-size:6px;color:var(--muted);text-align:center;}
+.heatmap-cell{height:24px;border-radius:3px;background:var(--dim);}
+.heatmap-legend{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:7px;color:var(--muted);}
+.heatmap-legend-bar{height:8px;width:140px;border-radius:2px;background:linear-gradient(90deg,var(--dim),var(--blue),var(--amber),var(--crit));}
+.toggle-row{display:flex;gap:8px;margin-bottom:20px;}
+.toggle-btn{font-family:var(--mono);font-size:7px;letter-spacing:.15em;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .2s;text-transform:uppercase;}
+.toggle-btn.active{border-color:var(--blue);color:var(--blue);background:rgba(79,195,247,.07);}
+.eol-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:22px;}
+.eol-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:18px 20px;}
+.eol-card-title{font-size:8px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:14px;}
+.eol-component{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:8px;}
+.eol-component:last-child{border-bottom:none;}
+.eol-comp-name{color:var(--muted);min-width:110px;}
+.eol-comp-bar-wrap{flex:1;height:3px;background:var(--dim);border-radius:2px;overflow:hidden;}
+.eol-comp-bar{height:100%;border-radius:2px;transition:width .8s;}
+.eol-comp-val{font-size:8px;min-width:32px;text-align:right;}
+.health-grade{font-size:10px;letter-spacing:.2em;text-align:center;margin-top:6px;}
+.health-note{font-size:8px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.6;}
+.maint-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px;}
+.maint-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.maint-card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.maint-card-title{font-size:8px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;}
+.maint-item{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.02);}
+.maint-item:last-child{border-bottom:none;}
+.maint-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;background:var(--s2);}
+.maint-info{flex:1;}
+.maint-name{font-size:9px;margin-bottom:2px;}
+.maint-due{font-size:7px;color:var(--muted);letter-spacing:.08em;}
+.maint-badge{font-size:7px;padding:2px 8px;border-radius:4px;letter-spacing:.1em;}
+.badge-ok{color:var(--green);background:rgba(0,229,160,.08);}
+.badge-soon{color:var(--amber);background:rgba(255,179,0,.08);}
+.badge-over{color:var(--crit);background:rgba(255,23,68,.08);}
+.timeline-item{display:flex;gap:14px;margin-bottom:14px;padding:0 18px;}
+.timeline-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:3px;}
+.timeline-info{flex:1;}
+.timeline-title{font-size:9px;margin-bottom:2px;}
+.timeline-sub{font-size:7px;color:var(--muted);letter-spacing:.08em;}
+.why-selector{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;}
+.why-btn{font-family:var(--mono);font-size:7px;letter-spacing:.15em;padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .2s;text-transform:uppercase;}
+.why-btn:hover{color:var(--text);}
+.why-btn.active{border-color:var(--purple);color:var(--purple);background:rgba(179,136,255,.07);}
+.why-ai-btn{font-family:var(--mono);font-size:7px;letter-spacing:.15em;padding:7px 18px;border-radius:6px;border:1px solid rgba(179,136,255,.4);background:rgba(179,136,255,.1);color:var(--purple);cursor:pointer;transition:all .2s;text-transform:uppercase;display:flex;align-items:center;gap:7px;margin-left:auto;}
+.why-ai-btn:hover{background:rgba(179,136,255,.2);}
+.why-ai-btn:disabled{opacity:.4;cursor:not-allowed;}
+.ai-spinner{width:8px;height:8px;border:1.5px solid rgba(179,136,255,.3);border-top-color:var(--purple);border-radius:50%;animation:spin .7s linear infinite;display:none;}
+.why-ai-btn.loading .ai-spinner{display:block;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.why-layout{display:grid;grid-template-columns:1.2fr 1fr;gap:20px;}
+.ai-chain-node{padding:14px 18px;border-radius:10px;border:1px solid var(--border);background:var(--s1);margin-bottom:0;animation:nodeIn .3s ease both;}
+.ai-chain-node.root-cause{border-color:rgba(255,23,68,.4);background:rgba(255,23,68,.04);}
+@keyframes nodeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ai-chain-why{font-size:7px;letter-spacing:.2em;color:var(--purple);margin-bottom:5px;text-transform:uppercase;}
+.ai-chain-node.root-cause .ai-chain-why{color:var(--crit);}
+.ai-chain-statement{font-size:9px;line-height:1.5;margin-bottom:3px;}
+.ai-chain-evidence{font-size:8px;color:var(--muted);}
+.ai-chain-arrow{text-align:center;color:var(--dim);font-size:13px;padding:4px 0;}
+.ai-side-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px;}
+.ai-side-top{height:2px;background:linear-gradient(90deg,var(--purple),var(--blue),transparent);}
+.ai-side-header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.ai-side-title{font-size:8px;letter-spacing:.18em;color:var(--purple);text-transform:uppercase;}
+.ai-severity{display:inline-flex;padding:2px 9px;border-radius:4px;font-size:7px;letter-spacing:.12em;}
+.ai-severity.low{color:var(--green);background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.2);}
+.ai-severity.medium{color:var(--amber);background:rgba(255,179,0,.08);border:1px solid rgba(255,179,0,.2);}
+.ai-severity.high{color:var(--crit);background:rgba(255,23,68,.08);border:1px solid rgba(255,23,68,.2);}
+.ai-body{padding:16px 18px;font-size:9px;line-height:1.8;color:var(--text);}
+.ai-body.empty{color:var(--muted);font-style:italic;}
+.ai-footer{font-size:7px;color:var(--dim);letter-spacing:.1em;padding:7px 18px;border-top:1px solid var(--border);}
+.ai-action-list{list-style:none;padding:0;}
+.ai-action-list li{padding:8px 18px;border-bottom:1px solid rgba(255,255,255,.02);font-size:9px;line-height:1.5;display:flex;gap:10px;}
+.ai-action-list li:last-child{border-bottom:none;}
+.ai-action-num{color:var(--purple);font-size:7px;letter-spacing:.1em;min-width:18px;margin-top:2px;flex-shrink:0;}
+.ai-placeholder{padding:32px 20px;text-align:center;color:var(--muted);font-size:9px;line-height:2;}
+.ctx-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;}
+.ctx-label{font-size:7px;color:var(--muted);letter-spacing:.15em;margin-bottom:4px;}
+.ctx-val{font-family:var(--display);font-size:28px;line-height:1;}
+.ctx-sub{font-size:8px;color:var(--text);margin-top:4px;}
+.ctx-status{margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:8px;color:var(--muted);}
+.why-side-card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:12px;}
+.why-side-title{font-size:8px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:10px;}
+footer{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:12px 32px;border-top:1px solid var(--border);font-size:7px;color:var(--muted);letter-spacing:.15em;}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loader">
+  <div class="loading-title">HONDA | CTRL ALT ELITE</div>
+  <div class="loading-sub">LOADING SAMPLE DATA · DEMO MODE</div>
+  <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
+</div>
+
+<div class="fs-alert" id="fsAlert">
+  <div class="fs-alert-box">
+    <div class="fs-alert-icon">⚠</div>
+    <div class="fs-alert-title">ALERT</div>
+    <div class="fs-alert-sub" id="fsAlertSub">SENSOR THRESHOLD EXCEEDED</div>
+    <div class="fs-alert-msg" id="fsAlertMsg">—</div>
+    <button class="fs-alert-btn" onclick="dismissAlert()">ACKNOWLEDGE · DISMISS</button>
+  </div>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <img src="img/Logo.svg" alt="Logo" style="width:20px;height:20px;">
+    </div>
+    <div><div class="logo-title">Honda | CTRL ALT ELITE</div><div class="logo-sub">Equipment Monitor · Alliston Plant · AutoHack 2.0</div></div>
+  </div>
+  <div class="header-right">
+    <div class="conn-pill" id="connPill"><div class="conn-dot"></div><span id="connText">DEMO · SAMPLE DATA</span></div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="showTab('live',this)">Live Monitor</button>
+  <button class="tab-btn" onclick="showTab('heatmap',this)">Heatmap</button>
+  <button class="tab-btn" onclick="showTab('eol',this)">End of Life</button>
+  <button class="tab-btn" onclick="showTab('maintenance',this)">Maintenance</button>
+  <button class="tab-btn" onclick="showTab('why',this)">5-Why · AI Analysis</button>
+</div>
+
+<main>
+
+<!-- LIVE -->
+<div class="tab-content active" id="tab-live">
+  <div class="alert-banner hidden" id="alertBanner">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polygon points="7,1.5 13,12 1,12"/><line x1="7" y1="5.5" x2="7" y2="8.5"/><circle cx="7" cy="10.5" r=".7" fill="currentColor" stroke="none"/></svg>
+    <span id="alertText">—</span>
+  </div>
+  <div class="stat-chips">
+    <div class="stat-chip"><span class="stat-chip-label">LAST UPDATE</span><span class="stat-chip-val" id="chip-ts">—</span></div>
+    <div class="stat-chip"><span class="stat-chip-label">DB ROWS (24H)</span><span class="stat-chip-val" id="chip-rows">1,847</span></div>
+    <div class="stat-chip"><span class="stat-chip-label">AVG TEMP</span><span class="stat-chip-val" id="chip-avg-temp">24.3°C</span></div>
+    <div class="stat-chip"><span class="stat-chip-label">AVG VIB</span><span class="stat-chip-val" id="chip-avg-vib">2,184</span></div>
+    <div class="stat-chip"><span class="stat-chip-label">PEAK VIB</span><span class="stat-chip-val" id="chip-peak-vib">—</span></div>
+  </div>
+  <div class="section-label">Live Readings</div>
+  <div class="metrics-row">
+    <div class="metric-card" style="--accent:var(--amber)"><div class="metric-glow"></div><div class="metric-label">Temperature</div><div class="metric-value" id="m-temp" style="color:var(--amber)">—<span class="metric-unit">°C</span></div><div class="metric-bar-track"><div class="metric-bar" id="m-temp-bar" style="background:var(--amber)"></div></div><div class="metric-sub" id="m-temp-sub">DS18B20 · Setpoint 25.5°C</div></div>
+    <div class="metric-card" style="--accent:var(--blue)"><div class="metric-glow" style="background:var(--blue)"></div><div class="metric-label">Vibration RMS</div><div class="metric-value" id="m-vib" style="color:var(--blue)">—<span class="metric-unit">rms</span></div><div class="metric-bar-track"><div class="metric-bar" id="m-vib-bar" style="background:var(--blue)"></div></div><div class="metric-sub" id="m-vib-sub">MPU-6050 · Alert 4000</div></div>
+    <div class="metric-card" style="--accent:var(--green)"><div class="metric-glow"></div><div class="metric-label">System Status</div><div class="metric-value" id="m-status" style="color:var(--green);font-size:30px">—</div><div class="metric-bar-track"><div class="metric-bar" id="m-status-bar"></div></div><div class="metric-sub">Arduino · COM13</div></div>
+    <div class="metric-card" style="--accent:var(--green)"><div class="metric-glow"></div><div class="metric-label">Risk Score</div>
+      <div class="risk-ring-wrap">
+        <svg width="64" height="64" viewBox="0 0 64 64"><circle class="risk-ring-bg" cx="32" cy="32" r="25"/><circle class="risk-ring-val" id="riskRing" cx="32" cy="32" r="25"/><text class="risk-ring-num" id="riskNum" x="32" y="32">0</text></svg>
+        <div><div class="risk-level" id="riskLevel">LOW RISK</div><div class="risk-desc" id="riskDesc">All sensors normal</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="section-label">Sensor Trends · Last 100 Readings</div>
+  <div class="charts-row">
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Temperature °C</div><div class="chart-live"><div class="chart-live-dot"></div>LIVE</div></div><canvas id="tempChart" height="140"></canvas></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Vibration RMS</div><div class="chart-live"><div class="chart-live-dot"></div>LIVE</div></div><canvas id="vibChart" height="140"></canvas></div>
+  </div>
+  <div class="section-label">Prediction Engine · Recent Records</div>
+  <div class="bottom-row">
+    <div class="pred-panel">
+      <div class="pred-top" id="predTop"></div>
+      <div class="pred-header">
+        <div class="pred-title">Decision Tree</div>
+        <div class="pred-badge" id="predBadge">SAFE</div>
+      </div>
+      <div class="dtree-wrap">
+        <div class="dtree-metrics">
+          <div class="dtree-metric"><div class="dtree-metric-label">Temp Δ</div><div class="dtree-metric-val" id="dt-temp-change" style="color:var(--amber)">—</div></div>
+          <div class="dtree-metric"><div class="dtree-metric-label">Vib Δ</div><div class="dtree-metric-val" id="dt-vib-change" style="color:var(--blue)">—</div></div>
+          <div class="dtree-metric"><div class="dtree-metric-label">Risk</div><div class="dtree-metric-val" id="dt-risk" style="color:var(--green)">SAFE</div></div>
+        </div>
+        <div class="dtree">
+          <div class="dtree-row"><div class="dtree-connector"><div class="dtree-dot" id="dt-dot-normal"></div><div class="dtree-line"></div></div><div class="dtree-node" id="dt-node-normal"><div class="dtree-cond" id="dt-cond-normal">|ΔT| &lt; 1°C  AND  |ΔV| &lt; 50 RMS</div><div class="dtree-outcome" id="dt-out-normal">→ normal operation · no action required</div></div></div>
+          <div class="dtree-row"><div class="dtree-connector"><div class="dtree-dot" id="dt-dot-loose"></div><div class="dtree-line"></div></div><div class="dtree-node" id="dt-node-loose"><div class="dtree-cond" id="dt-cond-loose">ΔV &gt; 600 RMS</div><div class="dtree-outcome" id="dt-out-loose">→ loose mechanical component · inspect machine mount</div></div></div>
+          <div class="dtree-row"><div class="dtree-connector"><div class="dtree-dot" id="dt-dot-friction"></div><div class="dtree-line"></div></div><div class="dtree-node" id="dt-node-friction"><div class="dtree-cond" id="dt-cond-friction">ΔT &gt; 3°C  AND  ΔV &gt; 200 RMS</div><div class="dtree-outcome" id="dt-out-friction">→ friction or bearing wear · lubricate bearing</div></div></div>
+          <div class="dtree-row"><div class="dtree-connector"><div class="dtree-dot" id="dt-dot-overheat"></div><div class="dtree-line"></div></div><div class="dtree-node" id="dt-node-overheat"><div class="dtree-cond" id="dt-cond-overheat">ΔT &gt; 3°C</div><div class="dtree-outcome" id="dt-out-overheat">→ overheating · check wiring connections</div></div></div>
+          <div class="dtree-row"><div class="dtree-connector"><div class="dtree-dot" id="dt-dot-imbalance"></div><div class="dtree-line"></div></div><div class="dtree-node" id="dt-node-imbalance"><div class="dtree-cond" id="dt-cond-imbalance">ΔV &gt; 200 RMS</div><div class="dtree-outcome" id="dt-out-imbalance">→ mechanical imbalance · check shaft alignment</div></div></div>
+          <div class="dtree-row"><div class="dtree-connector"><div class="dtree-dot" id="dt-dot-cooling"></div><div class="dtree-line"></div></div><div class="dtree-node" id="dt-node-cooling"><div class="dtree-cond" id="dt-cond-cooling">ΔT &lt; −3°C</div><div class="dtree-outcome" id="dt-out-cooling">→ cooling system active · system stabilizing</div></div></div>
+          <div class="dtree-row"><div class="dtree-connector"><div class="dtree-dot" id="dt-dot-unknown"></div></div><div class="dtree-node" id="dt-node-unknown"><div class="dtree-cond" id="dt-cond-unknown">fallthrough</div><div class="dtree-outcome" id="dt-out-unknown">→ unknown anomaly · inspect system</div></div></div>
+        </div>
+      </div>
+      <div class="action-card">
+        <div class="action-card-top" id="actionTop"></div>
+        <div class="action-inner">
+          <div class="action-cause-label">Diagnosed Cause</div>
+          <div class="action-cause-text" id="p-cause">Waiting for data…</div>
+          <div class="action-rec-label">Recommended Action</div>
+          <div class="action-rec-text" id="p-action">—</div>
+        </div>
+      </div>
+      <div class="pred-updated" id="p-updated">—</div>
+    </div>
+    <div class="history-panel">
+      <div class="history-header"><div class="history-title">Recent DB Records</div><div class="history-count" id="histCount">—</div></div>
+      <div class="history-scroll"><table class="history-table"><thead><tr><th>Timestamp</th><th>Temp °C</th><th>Vib RMS</th><th>Status</th></tr></thead><tbody id="histBody"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<!-- HEATMAP -->
+<div class="tab-content" id="tab-heatmap">
+  <div class="section-label">Hour-by-Hour Activity · Last 7 Days</div>
+  <div class="toggle-row">
+    <button class="toggle-btn active" onclick="switchHeatmap('temp',this)">Temperature</button>
+    <button class="toggle-btn" onclick="switchHeatmap('vib',this)">Vibration RMS</button>
+  </div>
+  <div class="heatmap-wrap">
+    <div class="chart-header" style="margin-bottom:0"><div class="chart-title" id="hmTitle">Temperature Heatmap · Avg per Hour</div></div>
+    <div class="heatmap-grid" id="heatmapGrid"></div>
+    <div class="heatmap-legend"><span>LOW</span><div class="heatmap-legend-bar"></div><span>HIGH</span></div>
+  </div>
+  <div class="section-label">Full 24h Trend</div>
+  <div class="chart-card" style="margin-bottom:22px"><div class="chart-header"><div class="chart-title">Temperature + Vibration · 24h Overlay</div><div class="chart-live"><div class="chart-live-dot"></div>SAMPLE DATA</div></div><canvas id="historyChart" height="180"></canvas></div>
+</div>
+
+<!-- EOL -->
+<div class="tab-content" id="tab-eol">
+  <div class="section-label">Equipment Health Score</div>
+  <div class="eol-grid">
+    <div class="eol-card" style="text-align:center">
+      <div class="eol-card-title">Overall Health</div>
+      <svg width="130" height="130" viewBox="0 0 130 130">
+        <circle cx="65" cy="65" r="54" fill="none" stroke="var(--dim)" stroke-width="6"/>
+        <circle id="healthRing" cx="65" cy="65" r="54" fill="none" stroke="var(--green)" stroke-width="6" stroke-linecap="round" stroke-dasharray="339" stroke-dashoffset="60" transform="rotate(-90 65 65)" style="transition:all 1s"/>
+        <text id="healthPct" x="65" y="60" text-anchor="middle" dominant-baseline="middle" font-family="'Bebas Neue'" font-size="30" fill="var(--text)">—</text>
+        <text x="65" y="82" text-anchor="middle" font-family="'JetBrains Mono'" font-size="7" fill="var(--muted)" letter-spacing="3">HEALTH</text>
+      </svg>
+      <div class="health-grade" id="healthGrade" style="color:var(--green)">—</div>
+      <div class="health-note" id="healthNote">Loading…</div>
+    </div>
+    <div class="eol-card"><div class="eol-card-title">Component Lifespan</div><div id="eolComponents"></div></div>
+    <div class="eol-card"><div class="eol-card-title">Degradation Indicators</div><div id="degradationList"></div></div>
+  </div>
+  <div class="section-label">Vibration Trend · 24h</div>
+  <div class="chart-card" style="margin-bottom:22px"><div class="chart-header"><div class="chart-title">Vibration RMS · Bearing Health Proxy</div></div><canvas id="eolChart" height="160"></canvas></div>
+</div>
+
+<!-- MAINTENANCE -->
+<div class="tab-content" id="tab-maintenance">
+  <div class="section-label">Maintenance Schedule</div>
+  <div class="maint-grid">
+    <div class="maint-card"><div class="maint-card-header"><div class="maint-card-title">Scheduled Tasks</div><span style="font-size:7px;color:var(--muted)">Based on sensor data</span></div><div id="maintTasks"></div></div>
+    <div class="maint-card"><div class="maint-card-header"><div class="maint-card-title">Timeline</div></div><div style="padding-top:14px" id="maintTimeline"></div></div>
+  </div>
+  <div class="section-label">Sensor Reference Stats</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px" id="maintStats"></div>
+</div>
+
+<!-- 5-WHY AI -->
+<div class="tab-content" id="tab-why">
+  <div class="section-label">AI-Powered 5-Why Root Cause Analysis · Sample Data</div>
+  <div class="why-selector">
+    <button class="why-btn active" onclick="setWhyScenario('vib',this)">High Vibration</button>
+    <button class="why-btn" onclick="setWhyScenario('temp',this)">Temperature Rise</button>
+    <button class="why-btn" onclick="setWhyScenario('combined',this)">Combined Fault</button>
+    <button class="why-btn" onclick="setWhyScenario('auto',this)">Auto-Detect</button>
+    <button class="why-ai-btn" id="whyAiBtn" onclick="runAiWhy()">
+      <div class="ai-spinner"></div>✦ Analyse with AI
+    </button>
+  </div>
+  <div class="why-layout">
+    <div>
+      <div class="section-label" style="margin-bottom:14px">5-Why Fault Chain</div>
+      <div id="whyChainWrap">
+        <div class="ai-placeholder">Select a fault scenario then click<br><strong style="color:var(--purple)">✦ Analyse with AI</strong><br><br>Requires a Groq API key (free at console.groq.com).<br>Uses sample sensor data for the analysis.</div>
+      </div>
+    </div>
+    <div>
+      <div class="section-label" style="margin-bottom:12px">Root Cause Summary</div>
+      <div class="ai-side-card">
+        <div class="ai-side-top"></div>
+        <div class="ai-side-header"><div class="ai-side-title">Groq · Llama 3.3 Analysis</div><div id="aiSeverityBadge"><span class="ai-severity low">PENDING</span></div></div>
+        <div class="ai-body empty" id="aiSummaryBody">Run analysis to see diagnosis based on sample sensor data.</div>
+        <div class="ai-footer" id="aiTimestamp">—</div>
+      </div>
+      <div class="section-label" style="margin-bottom:12px">Corrective Actions</div>
+      <div class="ai-side-card">
+        <div class="ai-side-top" style="background:linear-gradient(90deg,var(--green),var(--blue),transparent)"></div>
+        <div class="ai-side-header"><div class="ai-side-title">Action Plan</div></div>
+        <div id="aiActionsBody"><div class="ai-placeholder" style="padding:16px">Actions will appear after analysis.</div></div>
+      </div>
+      <div class="section-label" style="margin-bottom:12px">Live Sensor Context</div>
+      <div class="why-side-card">
+        <div class="why-side-title">Current Readings (Sample Data)</div>
+        <div class="ctx-grid">
+          <div><div class="ctx-label">TEMPERATURE</div><div class="ctx-val" id="ctxTemp" style="color:var(--amber)">—</div></div>
+          <div><div class="ctx-label">VIBRATION RMS</div><div class="ctx-val" id="ctxVib" style="color:var(--blue)">—</div></div>
+          <div><div class="ctx-label">TEMP DELTA</div><div class="ctx-sub" id="ctxTempDelta">—</div></div>
+          <div><div class="ctx-label">VIB CHANGE</div><div class="ctx-sub" id="ctxVibChange">—</div></div>
+        </div>
+        <div class="ctx-status" id="ctxStatus">Sample data loaded.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <span>Honda of Canada Mfg. · 4700 Industrial Pkwy, Alliston, ON · AutoHack 2.0</span>
+  <span>DEMO MODE · Sample Data · DS18B20 + MPU-6050</span>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────
+const TEMP_SETPOINT = 25.5;
+const TEMP_TOL      = 1.0;
+const VIB_ALERT     = 4000;
+const VIB_FAULT     = 8000;
+const MAX_PTS       = 100;
+
+const $ = id => document.getElementById(id);
+let tempHist=[],vibHist=[],chartLabels=[];
+let tempChart,vibChart,historyChart,eolChart;
+let peakVib=0,alertDismissed=false,lastAlertStatus='ok';
+let historyData=[],currentHeatmap='temp';
+let liveTemp=0,liveVib=0,whyScenario='vib',whyCooldown=false;
+let sampleCursor=0;
+
+// ─── SAMPLE DATABASE (1,847 rows simulated, store 200 for use) ─
+function buildSampleDB(){
+  const rows=[];
+  const now=Date.now();
+  // Generate 200 rows spanning 24h, realistic sensor patterns
+  for(let i=199;i>=0;i--){
+    const ts=new Date(now - i*(24*3600000/200));
+    // Temperature: baseline 24.2°C with drift + noise
+    const hour=ts.getHours();
+    const heatLoad = hour>=8&&hour<=18 ? 0.8 : 0.2; // warmer during shifts
+    const tempBase=23.8+heatLoad*1.6;
+    // Inject a vibration spike around row 60-70
+    const isSpike=(i>=60&&i<=75);
+    const temp=+(tempBase+(Math.random()-.46)*0.4+(isSpike?0.6:0)).toFixed(2);
+    const vibBase=isSpike?3600+Math.random()*800:1900+Math.random()*700+heatLoad*200;
+    const vib=Math.round(vibBase);
+    rows.push({id:1848-i,timestamp:ts.toISOString(),temperature:temp,vibration:vib});
+  }
+  return rows;
+}
+
+const DB = buildSampleDB();
+
+// Simulate "live" reading that ticks through DB rows
+function getNextLiveRow(){
+  const row=DB[sampleCursor % DB.length];
+  sampleCursor++;
+  // Nudge time to now so it reads as current
+  return {...row, timestamp:new Date().toISOString(), connected:true};
+}
+
+// Prediction derived from recent DB window
+function getPrediction(){
+  const recent=DB.slice(Math.max(0,sampleCursor-30),sampleCursor||1);
+  if(recent.length<2)return{risk:'SAFE',temp_change:0,vib_change:0,cause:'normal operation',action:'no action required',rows_used:recent.length,updated:new Date().toISOString()};
+  const first=recent[0],last=recent[recent.length-1];
+  const tempChange=parseFloat(last.temperature)-parseFloat(first.temperature);
+  const vibChange=parseFloat(last.vibration)-parseFloat(first.vibration);
+  const aT=Math.abs(tempChange),aV=Math.abs(vibChange);
+  let cause,action,riskLabel;
+  if(aT<1&&aV<50){cause='normal operation';action='no action required';riskLabel='SAFE';}
+  else if(vibChange>600){cause='loose mechanical component';action='inspect machine mount';riskLabel='CRITICAL';}
+  else if(tempChange>3&&vibChange>200){cause='friction or bearing wear';action='lubricate bearing';riskLabel='WARNING';}
+  else if(tempChange>3){cause='overheating';action='check wiring connections';riskLabel='WARNING';}
+  else if(vibChange>200){cause='mechanical imbalance';action='check shaft alignment';riskLabel='WARNING';}
+  else if(tempChange<-3){cause='cooling system active';action='system stabilizing';riskLabel='SAFE';}
+  else{cause='unknown anomaly';action='inspect system';riskLabel='WARNING';}
+  return{risk:riskLabel,temp_change:tempChange,vib_change:vibChange,cause,action,rows_used:recent.length,updated:new Date().toISOString()};
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────
+const tempColor = t => t < 25 ? '#00e5a0' : t < 27 ? '#ffb300' : '#ff1744';
+const vibColor  = v => v > VIB_ALERT ? '#ff1744' : v > 2500 ? '#ffb300' : '#4fc3f7';
+const riskColor = r => r >= 70 ? '#ff1744' : r >= 40 ? '#ffb300' : '#00e5a0';
+function calcRisk(t,v){const d=Math.abs(t-TEMP_SETPOINT),tr=d>TEMP_TOL*2?100:d>TEMP_TOL?50:0,vr=v>VIB_ALERT?100:Math.round(v/VIB_ALERT*100);return Math.round(tr*.5+vr*.5);}
+function statusLabel(t,v){const d=Math.abs(t-TEMP_SETPOINT);if(v>VIB_ALERT||d>TEMP_TOL*2)return'critical';if(d>TEMP_TOL||v>VIB_ALERT*.85)return'warning';return'ok';}
+
+// ─── TABS ─────────────────────────────────────────────────────
+function showTab(name,btn){
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  $('tab-'+name).classList.add('active');btn.classList.add('active');
+  if(name==='heatmap')renderHeatmap();
+  if(name==='eol')renderEOL();
+  if(name==='maintenance')renderMaintenance();
+  if(name==='why')updateWhyLiveContext();
+}
+
+function dismissAlert(){$('fsAlert').classList.remove('show');alertDismissed=true;setTimeout(()=>{alertDismissed=false;lastAlertStatus='ok';},30000);}
+function triggerAlert(status,temp,vib){
+  if(alertDismissed||lastAlertStatus===status||status==='ok')return;
+  lastAlertStatus=status;
+  $('fsAlertSub').textContent=status==='critical'?'CRITICAL — IMMEDIATE ACTION REQUIRED':'WARNING — SENSOR ANOMALY DETECTED';
+  $('fsAlertMsg').textContent=status==='critical'?`Temperature: ${temp.toFixed(1)}°C  |  Vibration RMS: ${Math.round(vib)}\n\nOne or more sensors exceeded critical thresholds.\nStop machine and inspect immediately.`:`Temperature: ${temp.toFixed(1)}°C  |  Vibration RMS: ${Math.round(vib)}\n\nSensor readings outside normal range. Monitor closely.`;
+  $('fsAlert').classList.add('show');
+}
+
+// ─── CHART DEFAULTS ───────────────────────────────────────────
+const CB={responsive:true,animation:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#111624',borderColor:'rgba(255,255,255,0.06)',borderWidth:1,titleColor:'#e8ecf4',bodyColor:'#4a5568',titleFont:{family:'JetBrains Mono',size:8},bodyFont:{family:'JetBrains Mono',size:8},padding:8}},scales:{x:{ticks:{color:'#2a3245',font:{family:'JetBrains Mono',size:7},maxTicksLimit:8},grid:{color:'rgba(255,255,255,0.02)'},border:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#4a5568',font:{family:'JetBrains Mono',size:8}},grid:{color:'rgba(255,255,255,0.02)'},border:{color:'rgba(255,255,255,0.04)'}}}};
+
+function initCharts(){
+  tempChart=new Chart($('tempChart').getContext('2d'),{type:'line',data:{labels:[],datasets:[{data:[],borderColor:'#FFB300',backgroundColor:'rgba(255,179,0,0.06)',borderWidth:1.5,pointRadius:0,tension:.4,fill:true},{data:[],borderColor:'rgba(0,229,160,0.3)',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false}]},options:{...CB,scales:{...CB.scales,y:{...CB.scales.y,min:23,max:30}}}});
+  vibChart=new Chart($('vibChart').getContext('2d'),{type:'line',data:{labels:[],datasets:[{data:[],borderColor:'#4FC3F7',backgroundColor:'rgba(79,195,247,0.05)',borderWidth:1.5,pointRadius:0,tension:.15,fill:true},{data:[],borderColor:'rgba(255,23,68,0.35)',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false}]},options:{...CB,scales:{...CB.scales,y:{...CB.scales.y,min:1500,max:5000}}}});
+  historyChart=new Chart($('historyChart').getContext('2d'),{type:'line',data:{labels:[],datasets:[{label:'Temp °C',data:[],borderColor:'#FFB300',backgroundColor:'rgba(255,179,0,0.05)',borderWidth:1.5,pointRadius:0,tension:.3,fill:true,yAxisID:'y'},{label:'Vib RMS',data:[],borderColor:'#4FC3F7',backgroundColor:'rgba(79,195,247,0.04)',borderWidth:1.5,pointRadius:0,tension:.1,fill:true,yAxisID:'y1'}]},options:{...CB,plugins:{...CB.plugins,legend:{display:true,labels:{color:'#4a5568',font:{family:'JetBrains Mono',size:8},boxWidth:10}}},scales:{x:CB.scales.x,y:{...CB.scales.y,position:'left'},y1:{...CB.scales.y,position:'right',grid:{drawOnChartArea:false}}}}});
+  eolChart=new Chart($('eolChart').getContext('2d'),{type:'line',data:{labels:[],datasets:[{data:[],borderColor:'#4FC3F7',backgroundColor:'rgba(79,195,247,0.05)',borderWidth:1.5,pointRadius:0,tension:.2,fill:true},{data:[],borderColor:'rgba(255,23,68,0.35)',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false}]},options:{...CB,scales:{...CB.scales,y:{...CB.scales.y,min:1500,max:5000}}}});
+}
+
+// ─── LIVE TICK (replaces fetchLive) ───────────────────────────
+function tickLive(){
+  const d=getNextLiveRow();
+  const temp=parseFloat(d.temperature),vib=parseFloat(d.vibration);
+  const risk=calcRisk(temp,vib),tc=tempColor(temp),vc=vibColor(vib),rc=riskColor(risk),stat=statusLabel(temp,vib);
+  liveTemp=temp;liveVib=vib;
+  $('chip-ts').textContent=new Date().toLocaleTimeString();
+  $('m-temp').innerHTML=temp.toFixed(1)+'<span class="metric-unit">°C</span>';$('m-temp').style.color=tc;
+  $('m-temp-bar').style.width=Math.min(100,((temp-23)/7)*100)+'%';$('m-temp-bar').style.background=tc;
+  $('m-temp-sub').textContent=`DS18B20 · Δ${(temp-TEMP_SETPOINT>0?'+':'')}${(temp-TEMP_SETPOINT).toFixed(2)}°C from setpoint`;
+  $('m-vib').innerHTML=Math.round(vib)+'<span class="metric-unit">rms</span>';$('m-vib').style.color=vc;
+  $('m-vib-bar').style.width=Math.min(100,((vib-1500)/2500)*100)+'%';$('m-vib-bar').style.background=vc;
+  if(vib>peakVib){peakVib=vib;$('chip-peak-vib').textContent=Math.round(peakVib);}
+  $('m-vib-sub').textContent=vib>VIB_ALERT?'⚠ ABOVE THRESHOLD':vib>2500?'ELEVATED':'NORMAL';
+  $('m-status').textContent=stat.toUpperCase();$('m-status').style.color=rc;
+  $('m-status-bar').style.width=risk+'%';$('m-status-bar').style.background=rc;
+  $('riskRing').style.strokeDashoffset=157*(1-risk/100);$('riskRing').style.stroke=rc;$('riskNum').textContent=risk;
+  $('riskLevel').textContent=risk>=70?'HIGH RISK':risk>=40?'MODERATE':'LOW RISK';$('riskLevel').style.color=rc;
+  $('riskDesc').textContent=risk>=70?'Immediate action required':risk>=40?'Monitor closely':'All sensors normal';
+  const banner=$('alertBanner');
+  if(stat!=='ok'){banner.classList.remove('hidden');$('alertText').textContent=stat==='critical'?`CRITICAL — Temp ${temp.toFixed(1)}°C · Vib ${Math.round(vib)} RMS exceeds threshold`:'WARNING — Sensor deviation detected';triggerAlert(stat,temp,vib);}
+  else{banner.classList.add('hidden');}
+  const ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  tempHist.push(temp);vibHist.push(vib);chartLabels.push(ts);
+  if(tempHist.length>MAX_PTS){tempHist.shift();vibHist.shift();chartLabels.shift();}
+  if(tempChart){tempChart.data.labels=[...chartLabels];tempChart.data.datasets[0].data=[...tempHist];tempChart.data.datasets[1].data=Array(chartLabels.length).fill(TEMP_SETPOINT);tempChart.update('none');}
+  if(vibChart){vibChart.data.labels=[...chartLabels];vibChart.data.datasets[0].data=[...vibHist];vibChart.data.datasets[0].borderColor=vc;vibChart.data.datasets[1].data=Array(chartLabels.length).fill(VIB_ALERT);vibChart.update('none');}
+  updateWhyLiveContext();
+}
+
+// ─── PREDICTION TICK (replaces fetchPrediction) ───────────────
+function tickPrediction(){
+  const d=getPrediction();
+  const risk=d.risk.toUpperCase();
+  const tempChange=parseFloat(d.temp_change||0),vibChange=parseFloat(d.vib_change||0);
+  const rc=risk==='CRITICAL'?'#ff1744':risk==='WARNING'?'#ffb300':'#00e5a0';
+  const cls=risk==='CRITICAL'?'crit':risk==='WARNING'?'warn':'';
+  $('predBadge').textContent=risk;$('predBadge').className='pred-badge'+(cls?' '+cls:'');
+  $('dt-temp-change').textContent=(tempChange>0?'+':'')+tempChange.toFixed(2)+'°C';
+  $('dt-temp-change').style.color=Math.abs(tempChange)>3?'#ff1744':Math.abs(tempChange)>1?'#ffb300':'#00e5a0';
+  $('dt-vib-change').textContent=(vibChange>0?'+':'')+Math.round(vibChange)+' rms';
+  $('dt-vib-change').style.color=vibChange>600?'#ff1744':vibChange>200?'#ffb300':'#4fc3f7';
+  $('dt-risk').textContent=risk;$('dt-risk').style.color=rc;
+  let activeNode='unknown';
+  const aT=Math.abs(tempChange),aV=Math.abs(vibChange);
+  if(aT<1&&aV<50)activeNode='normal';
+  else if(vibChange>600)activeNode='loose';
+  else if(tempChange>3&&vibChange>200)activeNode='friction';
+  else if(tempChange>3)activeNode='overheat';
+  else if(vibChange>200)activeNode='imbalance';
+  else if(tempChange<-3)activeNode='cooling';
+  else activeNode='unknown';
+  ['normal','loose','friction','overheat','imbalance','cooling','unknown'].forEach(n=>{
+    $('dt-dot-'+n).className='dtree-dot';$('dt-node-'+n).className='dtree-node';
+    $('dt-cond-'+n).className='dtree-cond';$('dt-out-'+n).className='dtree-outcome';
+  });
+  $('dt-dot-'+activeNode).className='dtree-dot active'+(cls?' '+cls:'');
+  $('dt-node-'+activeNode).className='dtree-node active'+(cls?' '+cls:'');
+  $('dt-cond-'+activeNode).className='dtree-cond active';
+  $('dt-out-'+activeNode).className='dtree-outcome active'+(cls?' '+cls:'');
+  $('actionTop').className='action-card-top'+(cls?' '+cls:'');
+  $('p-cause').textContent=d.cause||'normal operation';
+  $('p-action').textContent=d.action||'—';
+  $('p-action').className='action-rec-text'+(cls?' '+cls:'');
+  $('p-updated').textContent='Updated '+new Date(d.updated).toLocaleTimeString()+' · '+d.rows_used+' rows analysed · ΔT '+tempChange.toFixed(2)+'°C · ΔV '+Math.round(vibChange)+' rms';
+}
+
+// ─── HISTORY LOAD (replaces fetchHistory) ────────────────────
+function loadHistory(){
+  historyData=DB;
+  const temps=DB.map(r=>parseFloat(r.temperature)),vibs=DB.map(r=>parseFloat(r.vibration));
+  const avg=arr=>(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1);
+  $('chip-rows').textContent='1,847';
+  $('chip-avg-temp').textContent=avg(temps)+'°C';
+  $('chip-avg-vib').textContent=Math.round(parseFloat(avg(vibs)));
+  $('histCount').textContent='200 rows (sample 24h)';
+  $('histBody').innerHTML=DB.slice(0,30).map(row=>{
+    const t=parseFloat(row.temperature),v=parseFloat(row.vibration),s=statusLabel(t,v);
+    return`<tr><td class="tbl-time">${new Date(row.timestamp).toLocaleTimeString()}</td><td class="tbl-temp">${t.toFixed(2)}°C</td><td class="tbl-vib">${Math.round(v)}</td><td><span class="tbl-status ${s}">${s.toUpperCase()}</span></td></tr>`;
+  }).join('');
+  const skip=Math.max(1,Math.floor(DB.length/80));
+  const fil=DB.filter((_,i)=>i%skip===0);
+  if(historyChart){historyChart.data.labels=fil.map(r=>new Date(r.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));historyChart.data.datasets[0].data=fil.map(r=>parseFloat(r.temperature));historyChart.data.datasets[1].data=fil.map(r=>parseFloat(r.vibration));historyChart.update('none');}
+  if(eolChart){eolChart.data.labels=fil.map(r=>new Date(r.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));eolChart.data.datasets[0].data=fil.map(r=>parseFloat(r.vibration));eolChart.data.datasets[1].data=Array(fil.length).fill(VIB_ALERT);eolChart.update('none');}
+}
+
+// ─── HEATMAP ──────────────────────────────────────────────────
+function switchHeatmap(type,btn){currentHeatmap=type;document.querySelectorAll('#tab-heatmap .toggle-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');$('hmTitle').textContent=(type==='temp'?'Temperature':'Vibration RMS')+' Heatmap · Avg per Hour';renderHeatmap();}
+function renderHeatmap(){
+  if(!historyData.length)return;
+  const DAYS=7,HOURS=24,buckets={};
+  historyData.forEach(row=>{const d=new Date(row.timestamp),dayIdx=Math.floor((Date.now()-d.getTime())/86400000);if(dayIdx>=DAYS)return;const h=d.getHours(),key=`${dayIdx}-${h}`;if(!buckets[key])buckets[key]=[];buckets[key].push(parseFloat(currentHeatmap==='temp'?row.temperature:row.vibration));});
+  const allVals=Object.values(buckets).map(arr=>arr.reduce((a,b)=>a+b,0)/arr.length);
+  if(!allVals.length)return;
+  const minV=Math.min(...allVals),maxV=Math.max(...allVals),norm=v=>maxV===minV?.5:(v-minV)/(maxV-minV);
+  let html='<div></div>';
+  for(let h=0;h<HOURS;h++)html+=`<div class="heatmap-hour-label">${h}</div>`;
+  for(let i=DAYS-1;i>=0;i--){
+    const d=new Date(Date.now()-i*86400000);
+    html+=`<div class="heatmap-row-label">${d.toLocaleDateString([],{weekday:'short',month:'numeric',day:'numeric'})}</div>`;
+    for(let h=0;h<HOURS;h++){const arr=buckets[`${i}-${h}`];if(arr&&arr.length){const avg=arr.reduce((a,b)=>a+b,0)/arr.length,n=norm(avg);const color=n<.33?`rgba(79,195,247,${.2+n*1.5})`:n<.66?`rgba(255,179,0,${.3+(n-.33)*1.5})`:`rgba(255,23,68,${.4+(n-.66)*1.5})`;html+=`<div class="heatmap-cell" style="background:${color}" title="${currentHeatmap==='temp'?avg.toFixed(1)+'°C':Math.round(avg)+' RMS'}"></div>`;}else{html+=`<div class="heatmap-cell"></div>`;}}
+  }
+  $('heatmapGrid').innerHTML=html;
+}
+
+// ─── EOL ──────────────────────────────────────────────────────
+function renderEOL(){
+  if(!historyData.length)return;
+  const temps=historyData.map(r=>parseFloat(r.temperature)),vibs=historyData.map(r=>parseFloat(r.vibration));
+  const avgT=temps.reduce((a,b)=>a+b,0)/temps.length,avgV=vibs.reduce((a,b)=>a+b,0)/vibs.length,maxV=Math.max(...vibs);
+  const tempDev=Math.abs(avgT-TEMP_SETPOINT),vibScore=Math.max(0,100-((avgV-1500)/1000)*40),tempScore=Math.max(0,100-(tempDev/TEMP_TOL)*20);
+  const peakP=maxV>VIB_ALERT?15:maxV>2200?7:0,health=Math.min(100,Math.max(0,Math.round(vibScore*.6+tempScore*.4-peakP)));
+  const grade=health>=85?'EXCELLENT':health>=70?'GOOD':health>=50?'FAIR':'POOR';
+  const gc=health>=85?'#00e5a0':health>=70?'#4fc3f7':health>=50?'#ffb300':'#ff1744';
+  $('healthPct').textContent=health+'%';$('healthGrade').textContent=grade;$('healthGrade').style.color=gc;
+  $('healthRing').style.strokeDashoffset=339*(1-health/100);$('healthRing').style.stroke=gc;
+  $('healthNote').textContent=`Based on ${historyData.length} sample readings · 24h window`;
+  $('eolComponents').innerHTML=[{name:'Bearings',life:Math.max(10,100-((avgV-1500)/500)*30),color:vibColor(avgV)},{name:'Motor Windings',life:Math.max(10,100-(tempDev/5)*40),color:tempColor(avgT)},{name:'Shaft Alignment',life:Math.max(10,100-(maxV>2200?30:5)),color:vibColor(maxV)},{name:'DS18B20 Sensor',life:92,color:'#00e5a0'},{name:'MPU-6050 Sensor',life:88,color:'#00e5a0'}].map(c=>`<div class="eol-component"><span class="eol-comp-name">${c.name}</span><div class="eol-comp-bar-wrap"><div class="eol-comp-bar" style="width:${c.life}%;background:${c.color}"></div></div><span class="eol-comp-val" style="color:${c.color}">${Math.round(c.life)}%</span></div>`).join('');
+  const vT=vibs[0]-vibs[vibs.length-1],tT=temps[0]-temps[temps.length-1];
+  $('degradationList').innerHTML=[{label:'Vibration Trend',val:(vT>0?'+':'')+Math.round(vT)+' RMS',note:vT>100?'Degrading':'Stable',cls:vT>100?'critical':'ok'},{label:'Temp Drift',val:(tT>0?'+':'')+tT.toFixed(2)+'°C',note:Math.abs(tT)>.5?'Drifting':'Stable',cls:Math.abs(tT)>.5?'warning':'ok'},{label:'Peak Vibration',val:Math.round(maxV)+' RMS',note:maxV>VIB_ALERT?'Exceeded':'In range',cls:maxV>VIB_ALERT?'critical':'ok'},{label:'Avg Temp',val:avgT.toFixed(1)+'°C',note:tempDev<TEMP_TOL?'Normal':'Off setpoint',cls:tempDev<TEMP_TOL?'ok':'warning'}].map(d=>`<div class="eol-component"><span class="eol-comp-name">${d.label}</span><span style="flex:1;text-align:right;font-size:9px;margin-right:8px;color:${d.cls==='critical'?'#ff1744':d.cls==='warning'?'#ffb300':'#00e5a0'}">${d.val}</span><span class="tbl-status ${d.cls}">${d.note}</span></div>`).join('');
+}
+
+// ─── MAINTENANCE ──────────────────────────────────────────────
+function renderMaintenance(){
+  const tasks=[{icon:'🔧',name:'Bearing Lubrication',due:'Every 500 hrs',badge:'ok',note:'Last: 2 weeks ago'},{icon:'🔩',name:'Shaft Alignment Check',due:'Every 1000 hrs',badge:'soon',note:'Due this week'},{icon:'🌡️',name:'Thermal Imaging Scan',due:'Monthly',badge:'ok',note:'Last: 3 days ago'},{icon:'📡',name:'Sensor Calibration',due:'Every 90 days',badge:'ok',note:'Last: 30 days ago'},{icon:'⚙️',name:'Motor Winding Test',due:'Every 6 months',badge:'ok',note:'In 5 months'},{icon:'🔍',name:'Full Mechanical Inspect',due:'Annually',badge:'ok',note:'Last: 4 months ago'}];
+  $('maintTasks').innerHTML=tasks.map(t=>`<div class="maint-item"><div class="maint-icon">${t.icon}</div><div class="maint-info"><div class="maint-name">${t.name}</div><div class="maint-due">${t.due} · ${t.note}</div></div><span class="maint-badge badge-${t.badge==='ok'?'ok':t.badge==='soon'?'soon':'over'}">${t.badge==='ok'?'ON TRACK':t.badge==='soon'?'DUE SOON':'OVERDUE'}</span></div>`).join('');
+  const tl=[{color:'#00e5a0',title:'Bearing lubrication completed',sub:'2 weeks ago'},{color:'#4fc3f7',title:'Thermal scan — no anomalies',sub:'3 days ago'},{color:'#ffb300',title:'Shaft alignment check due',sub:'This week'},{color:'#4fc3f7',title:'Sensor calibration',sub:'In 60 days'},{color:'#b388ff',title:'Motor winding test',sub:'In 5 months'},{color:'#4a5568',title:'Annual inspection',sub:'In 8 months'}];
+  $('maintTimeline').innerHTML=tl.map((item,i)=>`<div class="timeline-item"><div style="display:flex;flex-direction:column;align-items:center;"><div class="timeline-dot" style="background:${item.color}"></div>${i<tl.length-1?'<div style="width:2px;height:22px;background:var(--border);margin-top:2px"></div>':''}</div><div class="timeline-info"><div class="timeline-title">${item.title}</div><div class="timeline-sub">${item.sub}</div></div></div>`).join('');
+  const temps=DB.map(r=>parseFloat(r.temperature)),vibs=DB.map(r=>parseFloat(r.vibration));
+  $('maintStats').innerHTML=[{label:'AVG TEMP 24H',val:(temps.reduce((a,b)=>a+b,0)/temps.length).toFixed(1)+'°C'},{label:'AVG VIB 24H',val:Math.round(vibs.reduce((a,b)=>a+b,0)/vibs.length)+' RMS'},{label:'PEAK VIB 24H',val:Math.round(Math.max(...vibs))+' RMS'},{label:'TOTAL READINGS',val:'1,847'}].map(s=>`<div class="metric-card" style="--accent:var(--blue)"><div class="metric-label">${s.label}</div><div style="font-family:var(--display);font-size:36px;color:var(--blue);margin-top:6px">${s.val}</div></div>`).join('');
+}
+
+// ─── 5-WHY ────────────────────────────────────────────────────
+function setWhyScenario(type,btn){whyScenario=type;document.querySelectorAll('.why-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');updateWhyLiveContext();}
+function updateWhyLiveContext(){
+  $('ctxTemp').textContent=liveTemp?liveTemp.toFixed(1)+'°C':'—';
+  $('ctxVib').textContent=liveVib?Math.round(liveVib)+' rms':'—';
+  $('ctxTempDelta').textContent=liveTemp?(liveTemp-TEMP_SETPOINT>0?'+':'')+(liveTemp-TEMP_SETPOINT).toFixed(2)+'°C from setpoint':'—';
+  $('ctxVibChange').textContent=$('dt-vib-change')?.textContent||'—';
+  $('ctxStatus').textContent=`Status: ${statusLabel(liveTemp,liveVib).toUpperCase()} · Setpoint: ${TEMP_SETPOINT}°C ± ${TEMP_TOL}°C · Alert: ${VIB_ALERT} RMS`;
+}
+
+async function runAiWhy(){
+  if(whyCooldown)return;
+  const btn=$('whyAiBtn');
+  let GROQ_KEY=localStorage.getItem('groq_api_key')||'';
+  if(!GROQ_KEY){
+    GROQ_KEY=window.prompt('Enter your Groq API key (starts with gsk_):','');
+    if(!GROQ_KEY||!GROQ_KEY.startsWith('gsk_')){alert('Invalid key. Get one free at console.groq.com');return;}
+    localStorage.setItem('groq_api_key',GROQ_KEY);
+  }
+  const snap=DB.slice(Math.max(0,DB.length-30));
+  const predCause=$('p-cause')?.textContent||'unknown',predRisk=$('dt-risk')?.textContent||'SAFE';
+  const temps=snap.map(r=>parseFloat(r.temperature)),vibs=snap.map(r=>parseFloat(r.vibration));
+  const avgT=(temps.reduce((a,b)=>a+b,0)/temps.length).toFixed(2);
+  const avgV=Math.round(vibs.reduce((a,b)=>a+b,0)/vibs.length);
+  const maxV=Math.round(Math.max(...vibs));
+  const minT=Math.min(...temps).toFixed(2),maxT=Math.max(...temps).toFixed(2);
+  const scenarioLabel={vib:'High Vibration',temp:'Temperature Rise',combined:'Combined Fault',auto:'Auto-Detected'}[whyScenario];
+  const userPrompt=`You are an industrial equipment analyst at Honda of Canada Mfg, Alliston Plant.
+Perform a rigorous 5-Why root cause analysis on this sensor data.
+
+SENSOR DATA (last 30 samples):
+- Current Temp: ${liveTemp.toFixed(2)}°C | Setpoint: ${TEMP_SETPOINT}°C ± ${TEMP_TOL}°C
+- Current Vibration RMS: ${Math.round(liveVib)} | Alert Threshold: ${VIB_ALERT} | Fault: ${VIB_FAULT}
+- Avg Temp: ${avgT}°C | Min: ${minT}°C | Max: ${maxT}°C
+- Avg Vib RMS: ${avgV} | Peak: ${maxV}
+- ML Prediction: Risk=${predRisk}, Cause="${predCause}"
+- Sensors: DS18B20 (temperature) + MPU-6050/GY-521 (vibration)
+- Fault scenario: ${scenarioLabel}
+
+Respond ONLY with valid JSON (no markdown, no text outside JSON):
+{"severity":"LOW"|"MEDIUM"|"HIGH","summary":"2-3 sentence specific diagnosis using actual numbers","chain":[{"why":"WHY 1","statement":"specific observation","evidence":"cite actual numbers"},{"why":"WHY 2","statement":"...","evidence":"..."},{"why":"WHY 3","statement":"...","evidence":"..."},{"why":"WHY 4","statement":"...","evidence":"..."},{"why":"WHY 5 · Root Cause","statement":"root cause","evidence":"systemic reason","root":true}],"actions":["Specific action 1 with exact values","action 2","action 3","action 4"]}`;
+
+  btn.disabled=true;btn.classList.add('loading');
+  $('aiSummaryBody').className='ai-body empty';$('aiSummaryBody').textContent='Groq · Llama 3.3 is analysing sample sensor data…';
+  $('whyChainWrap').innerHTML='<div class="ai-placeholder">Building 5-Why chain…</div>';
+  $('aiActionsBody').innerHTML='<div class="ai-placeholder" style="padding:16px">Generating corrective actions…</div>';
+
+  try{
+    const resp=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+GROQ_KEY},body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:1000,temperature:0.3,messages:[{role:'system',content:'You are an industrial equipment failure analyst. Always respond with valid JSON only — no markdown fences, no extra text.'},{role:'user',content:userPrompt}]})});
+    if(resp.status===401){localStorage.removeItem('groq_api_key');throw new Error('Invalid API key — cleared. Refresh and try again.');}
+    const data=await resp.json();
+    const raw=data.choices?.[0]?.message?.content||'';
+    const ai=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    const sev=(ai.severity||'LOW').toUpperCase(),sevCls=sev==='HIGH'?'high':sev==='MEDIUM'?'medium':'low';
+    $('aiSeverityBadge').innerHTML=`<span class="ai-severity ${sevCls}">${sev}</span>`;
+    $('aiSummaryBody').className='ai-body';$('aiSummaryBody').textContent=ai.summary||'—';
+    $('aiTimestamp').textContent=`Analysed ${new Date().toLocaleTimeString()} · Temp ${liveTemp.toFixed(1)}°C · Vib ${Math.round(liveVib)} RMS · via Groq`;
+    $('whyChainWrap').innerHTML=(ai.chain||[]).map((node,i)=>`<div class="ai-chain-node ${node.root?'root-cause':''}" style="animation-delay:${i*.08}s"><div class="ai-chain-why">${node.why}</div><div class="ai-chain-statement">${node.statement}</div><div class="ai-chain-evidence">${node.evidence}</div></div>${!node.root?'<div class="ai-chain-arrow">↓</div>':''}`).join('');
+    $('aiActionsBody').innerHTML=`<ul class="ai-action-list">${(ai.actions||[]).map((a,i)=>`<li><span class="ai-action-num">${String(i+1).padStart(2,'0')}</span><span>${a}</span></li>`).join('')}</ul>`;
+    updateWhyLiveContext();
+    whyCooldown=true;let cd=60;
+    const timer=setInterval(()=>{btn.textContent=`✦ Cooldown ${cd--}s`;if(cd<0){clearInterval(timer);btn.innerHTML='<div class="ai-spinner"></div>✦ Analyse with AI';btn.disabled=false;btn.classList.remove('loading');whyCooldown=false;}},1000);
+  }catch(e){
+    $('aiSummaryBody').textContent='Analysis failed: '+e.message;$('aiSummaryBody').className='ai-body';
+    btn.innerHTML='<div class="ai-spinner"></div>✦ Analyse with AI';btn.disabled=false;btn.classList.remove('loading');
+  }
+}
+
+// ─── BOOT ─────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded',()=>{
+  setInterval(()=>$('clock').textContent=new Date().toLocaleTimeString(),1000);
+  setTimeout(()=>$('loader').classList.add('done'),1500);
+  initCharts();
+  loadHistory();
+  renderMaintenance();
+  renderHeatmap();
+  renderEOL();
+  // Kick off live simulation immediately then every 2s
+  tickLive();tickPrediction();
+  setInterval(tickLive,2000);
+  setInterval(tickPrediction,10000);
+});
+</script>
+</body>
+</html>
